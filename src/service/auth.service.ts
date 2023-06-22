@@ -1,16 +1,16 @@
 import { DocumentType } from "@typegoose/typegoose";
 import lodash from "lodash";
 const { omit, isUndefined } = lodash;
-import SessionModel from "../model/session.model.js";
-import { privateFields, User } from "../model/user.model.js";
-import { signJwt, verifyJwt } from "../utils/jwt.js";
-import log from "../utils/logger.js";
-import {
-  findUserByEmail,
-  findUserById,
-  getUserResponseDto,
-} from "./user.service.js";
+import SessionModel from "../model/session.model";
+import { privateFields, User } from "../model/user.model";
+import { signJwt, verifyJwt } from "../utils/jwt";
+import log from "../utils/logger";
+import { findUserByEmail, findUserById } from "./user.service";
+import { getUserResponseDto } from "../converter/appConverter";
 
+import ValidationError from "../exceptions/ValidationError";
+import NotFoundError from "../exceptions/NotFoundError";
+import InternalServerError from "../exceptions/InternalServerError";
 export async function authenticateUser(
   email: string,
   password: string
@@ -28,58 +28,56 @@ export async function authenticateUser(
   if (!user.verified) {
     throw Error("Please verify your email");
   }
-  try {
-    // sign a access token
-    const accessToken = signAccessToken(user);
+  // sign a access token
+  const accessToken = signAccessToken(user);
 
-    // sign a refresh token
-    const refreshToken = await signRefreshToken({ userId: user._id });
-    return { accessToken, refreshToken };
-  } catch (error) {
-    log.error(`error regarding the tokens because: ${error}`);
-    throw error;
-  }
+  // sign a refresh token
+  const refreshToken = await signRefreshToken({ userId: user._id });
+  return { accessToken, refreshToken };
 }
 
 export async function refreshAccessToken(
   refreshToken: string
 ): Promise<string | never> {
   const message = "Could not refresh access token";
-  try {
-    const decoded = verifyJwt<{ session: string }>(
-      refreshToken,
-      "refreshTokenPublicKey"
-    );
-    log.info(`decoded: ${decoded}`);
-    if (!decoded) {
-      throw Error(message);
-    }
-
-    const session = await findSessionById(decoded.session);
-    if (!session || !session.valid) {
-      throw Error(message);
-    }
-    log.info(`session: ${session.user}`);
-    const user = await findUserById(String(session.user));
-    log.info(`user: ${user}`);
-    if (!user) {
-      throw Error(message);
-    }
-
-    const accessToken = signAccessToken(user);
-    return accessToken;
-  } catch (error) {
-    log.error(`error regarding the tokens because: ${error}`);
-    throw error;
+  const decoded = verifyJwt<{ session: string }>(
+    refreshToken,
+    "refreshTokenPublicKey"
+  );
+  log.info(`decoded: ${decoded}`);
+  if (!decoded) {
+    throw Error(message);
   }
+
+  const session = await findSessionById(decoded.session);
+  if (!session || !session.valid) {
+    throw new NotFoundError(message);
+  }
+  log.info(`session: ${session.user}`);
+  const user = await findUserById(String(session.user));
+  log.info(`user: ${user}`);
+  if (!user) {
+    throw Error(message);
+  }
+
+  const accessToken = signAccessToken(user);
+  return accessToken;
 }
 
 export async function createSession({ userId }: { userId: string }) {
-  return SessionModel.create({ user: userId });
+  try {
+    return SessionModel.create({ user: userId });
+  } catch (error) {
+    throw new InternalServerError("Error creating session");
+  }
 }
 
 export async function findSessionById(id: string) {
-  return SessionModel.findById(id);
+  try {
+    return SessionModel.findById(id);
+  } catch (error) {
+    throw new NotFoundError("couldn't find session");
+  }
 }
 
 export async function signRefreshToken({ userId }: { userId: string }) {
@@ -103,11 +101,15 @@ export async function signRefreshToken({ userId }: { userId: string }) {
 }
 
 export function signAccessToken(user: DocumentType<User>) {
-  const payload = getUserResponseDto(user);
-  const a = user.toJSON();
-  const accessToken = signJwt(payload, "accessTokenPrivateKey", {
-    expiresIn: "15m",
-  });
-  log.info(`accessToken: ${accessToken}`);
-  return accessToken;
+  try {
+    const payload = getUserResponseDto(user);
+    const accessToken = signJwt(payload, "accessTokenPrivateKey", {
+      expiresIn: "15m",
+    });
+    log.info(`accessToken: ${accessToken}`);
+    return accessToken;
+  } catch (error: any) {
+    log.error(`Could not sign access token`);
+    throw new InternalServerError(error.message);
+  }
 }

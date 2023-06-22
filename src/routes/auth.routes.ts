@@ -2,9 +2,9 @@ import express from "express";
 import {
   createSessionController,
   refreshAccessTokenController,
-} from "../controller/auth.controller.js";
-import validateResource from "../middleware/ValidateResourse.js";
-import { createSessionSchema } from "../schema/auth.schema.js";
+} from "../controller/auth.controller";
+import validateResource from "../middleware/ValidateResourse";
+import { createSessionSchema } from "../schema/auth.schema";
 
 const authRouter = express.Router();
 

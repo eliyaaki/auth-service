@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import lodash from "lodash";
-import log from "./logger.js";
+import log from "./logger";
 const { snakeCase } = lodash;
 export function signJwt(
   object: object | string | Buffer,

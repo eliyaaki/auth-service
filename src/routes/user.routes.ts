@@ -6,16 +6,16 @@ import {
   resetPasswordController,
   verifyUserController,
   getUserByEmailController,
-} from "../controller/user.controller.js";
-import requireUser from "../middleware/requireUser.js";
-import validateResource from "../middleware/ValidateResourse.js";
+} from "../controller/user.controller";
+import requireUser from "../middleware/requireUser";
+import validateResource from "../middleware/ValidateResourse";
 import {
   createUserSchema,
   forgottenPasswordSchema,
   getUserByEmailSchema,
   resetPasswordSchema,
   verifyUserSchema,
-} from "../schema/user.schema.js";
+} from "../schema/user.schema";
 
 const userRouter = express.Router();
 
@@ -23,6 +23,7 @@ userRouter.get("/api/users/getAllUsers", requireUser, getAllUsersController);
 
 userRouter.get(
   "/api/users/getUserByEmail/:email",
+  requireUser,
   validateResource(getUserByEmailSchema),
   getUserByEmailController
 );

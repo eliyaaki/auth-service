@@ -1,10 +1,7 @@
-// require("dotenv").config();
-// import * as dotenv from "dotenv";
-// dotenv.config();
 import "dotenv/config";
-import log from "./utils/logger.js";
-import connectToDb from "./utils/connectToDb.js";
-import createServer from "./utils/createServer.js";
+import log from "./utils/logger";
+import connectToDb from "./utils/connectToDb";
+import createServer from "./utils/createServer";
 
 const app = createServer();
 

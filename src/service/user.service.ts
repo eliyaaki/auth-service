@@ -1,52 +1,52 @@
 import lodash from "lodash";
 const { omit } = lodash;
 import { DocumentType } from "@typegoose/typegoose";
-import * as nanoid from "nanoid";
-import UserModel, { privateFields, User } from "../model/user.model.js";
-import log from "../utils/logger.js";
-import sendEmail from "../utils/mailer.js";
+import { nanoid } from "nanoid";
+import UserModel, { privateFields, User } from "../model/user.model";
+import log from "../utils/logger";
+import sendEmail from "../utils/mailer";
+import { getUserResponseDto } from "../converter/appConverter";
 
+import NotFoundError from "../exceptions/NotFoundError";
+import InternalServerError from "../exceptions/InternalServerError";
 export async function getAllUsers() {
-  return UserModel.find({});
+  const allUsers = UserModel.find({});
+  if (!allUsers) throw new NotFoundError("Users not found");
+  return allUsers;
 }
 
 export async function createUser(input: Partial<User>) {
-  try {
-    const user = await UserModel.create(input);
-    if (!user) {
-      log.debug("couldn't create user with this email address");
-      throw Error("Error creating user");
-    }
-    const subject = "Verification Email";
-    const message = `${process.env.BASE_URL}/api/users/verify/${user.id}/${user.verificationCode}`;
-    log.info(`subject: ${subject}, message: ${message}`);
-    await sendingEmail(
-      user?.email,
-      subject,
-      message,
-      createVerificationHtml(message, subject)
-    );
-    return getUserResponseDto(user);
-  } catch (error) {
-    throw error;
+  const user = await UserModel.create(input);
+  if (!user) {
+    log.debug("couldn't create user with this email address");
+    throw new InternalServerError("Error creating user");
   }
+  const subject = "Verification Email";
+  const message = `${process.env.BASE_URL}/api/users/verify/${user.id}/${user.verificationCode}`;
+  log.info(`subject: ${subject}, message: ${message}`);
+  await sendingEmail(
+    user?.email,
+    subject,
+    message,
+    createVerificationHtml(message, subject)
+  );
+  const userResponseDto = getUserResponseDto(user);
+  return userResponseDto;
 }
 
 export async function verifyUser(id: string, verificationCode: string) {
+  const user = await findUserById(id);
+  if (!user) throw new NotFoundError("User not found");
+  if (user.verified) throw Error("user is already verified");
+
+  if (user?.verificationCode !== verificationCode)
+    throw Error("user verification failed");
+
   try {
-    var user = await findUserById(id);
-    if (!user) {
-      throw Error("couldn't find user");
-    }
-    if (user.verified) {
-      throw Error("user is already verified");
-    }
-    if (user.verificationCode === verificationCode) {
-      user.verified = true;
-      await user.save();
-    } else throw Error("user verification failed");
-  } catch (error: any) {
-    throw error;
+    user.verified = true;
+    await user.save();
+  } catch (error) {
+    throw new InternalServerError("user verification failed");
   }
 }
 
@@ -61,10 +61,14 @@ export async function forgottenPassword(email: string) {
   if (!user.verified) {
     throw Error("user not verified");
   }
-  user.passwordResetCode = await generatePasswordResetCode();
-  user.save();
+  try {
+    user.passwordResetCode = await generatePasswordResetCode();
+    user.save();
+  } catch (error) {
+    throw new InternalServerError("couldn't generate reset password code");
+  }
   const subject = "Reset password";
-  const message = `${process.env.BASE_URL}/api/users/resetPassword/${user.id}/${user.passwordResetCode}`;
+  const message = `${process.env.BASE_URL}/api/users/resetPassword/${user._id}/${user.passwordResetCode}`;
   log.info(`subject: ${subject}, message: ${message}`);
 
   await sendingEmail(
@@ -88,22 +92,32 @@ export async function resetPassword(
   ) {
     throw Error("couldn't reset password");
   }
-  user.passwordResetCode = null;
-  user.password = password;
-  await user.save();
+
+  try {
+    user.passwordResetCode = null;
+    user.password = password;
+    await user.save();
+  } catch (error) {
+    throw new InternalServerError("couldn't reset password");
+  }
 }
 
 export async function findUserById(id: string) {
-  return UserModel.findById(id);
+  try {
+    return UserModel.findById(id);
+  } catch (error) {
+    throw new NotFoundError("User not found");
+  }
 }
 export async function findUserByEmail(email: string) {
-  return UserModel.findOne({ email });
-}
-export function getUserResponseDto(user: DocumentType<User>) {
-  return omit(user.toJSON(), privateFields);
+  try {
+    return UserModel.findOne({ email });
+  } catch (error) {
+    throw new NotFoundError("User not found");
+  }
 }
 async function generatePasswordResetCode() {
-  const resetCode = nanoid.nanoid();
+  const resetCode = nanoid();
   return resetCode;
 }
 async function sendingEmail(
@@ -112,13 +126,17 @@ async function sendingEmail(
   text: string,
   html: string
 ) {
-  sendEmail({
-    // from: "a3bf3c834faa38",
-    to: emailTo,
-    subject,
-    text,
-    html,
-  });
+  try {
+    sendEmail({
+      from: process.env.SMTP_USER!,
+      to: emailTo,
+      subject,
+      text,
+      html,
+    });
+  } catch (error) {
+    throw new InternalServerError("Error sending email");
+  }
 }
 
 function createResetPasswordHtml(text: string, subject: string) {
@@ -209,7 +227,7 @@ function createResetPasswordHtml(text: string, subject: string) {
   `;
 }
 
-function createVerificationHtml(text: string, subject: string) {
+export function createVerificationHtml(text: string, subject: string): string {
   return `
   <!DOCTYPE html>
   <html lang="en">
@@ -254,7 +272,7 @@ function createVerificationHtml(text: string, subject: string) {
         }
         button {
           display: block;
-          background-color: #4caf50;
+          background-color: #008CBA;
           color: #fff;
           border: none;
           padding: 10px 20px;

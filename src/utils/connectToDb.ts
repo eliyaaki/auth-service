@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import log from "./logger.js";
+import log from "./logger";
 
 async function connectToDb() {
   const dbUri = process.env.DB_URI || "mongodb://127.0.0.1/auth-service";

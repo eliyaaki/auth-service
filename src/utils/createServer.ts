@@ -1,6 +1,6 @@
 import express from "express";
-import router from "../routes/index.js";
-import deserializeUser from "../middleware/deserializeUser.js";
+import router from "../routes/index";
+import deserializeUser from "../middleware/deserializeUser";
 
 function createServer() {
   const appServer = express();

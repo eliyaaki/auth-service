@@ -2,19 +2,16 @@ import { DocumentType } from "@typegoose/typegoose";
 import { Request, Response } from "express";
 import lodash from "lodash";
 const { get, isUndefined } = lodash;
-import { User } from "../model/user.model.js";
-import { CreateSessionInput } from "../schema/auth.schema.js";
+import { CreateSessionInput } from "../schema/auth.schema";
 import {
   authenticateUser,
   findSessionById,
   refreshAccessToken,
   signAccessToken,
   signRefreshToken,
-} from "../service/auth.service.js";
-import { findUserById, findUserByEmail } from "../service/user.service.js";
-import { verifyJwt } from "../utils/jwt.js";
-import log from "../utils/logger.js";
-
+} from "../service/auth.service";
+import NotFoundError from "../exceptions/NotFoundError";
+import InternalServerError from "../exceptions/InternalServerError";
 export async function createSessionController(
   req: Request<{}, {}, CreateSessionInput>,
   res: Response
@@ -29,7 +26,13 @@ export async function createSessionController(
       refreshToken: tokens.refreshToken,
     });
   } catch (error: any) {
-    return res.status(401).json({ status: 401, message: error.message });
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
 
@@ -48,6 +51,12 @@ export async function refreshAccessTokenController(
 
     return res.status(200).send({ accessToken });
   } catch (error: any) {
-    return res.status(401).json({ status: 401, message: error.message });
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }

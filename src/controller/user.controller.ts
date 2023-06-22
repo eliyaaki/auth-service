@@ -1,13 +1,11 @@
 import { Request, Response } from "express";
-import { FlattenMaps, LeanDocument } from "mongoose";
-import { User } from "../model/user.model.js";
 import {
   CreateUserInput,
   VerifyUserInput,
   ForgottenPasswordInput,
   ResetPasswordInput,
   GetUserByEmailInput,
-} from "../schema/user.schema.js";
+} from "../schema/user.schema";
 import {
   createUser,
   verifyUser,
@@ -15,25 +13,31 @@ import {
   resetPassword,
   getAllUsers,
   findUserByEmail,
-  getUserResponseDto,
-} from "../service/user.service.js";
-import log from "../utils/logger.js";
-import sendEmail from "../utils/mailer.js";
+} from "../service/user.service";
+import log from "../utils/logger";
+import { getUserResponseDto } from "../converter/appConverter";
 
+import ValidationError from "../exceptions/ValidationError";
+import NotFoundError from "../exceptions/NotFoundError";
+import InternalServerError from "../exceptions/InternalServerError";
 export async function getAllUsersController(
   req: Request<{}, {}, {}>,
   res: Response
 ) {
   try {
     const allUsers = await getAllUsers();
-    if (!allUsers) {
-      throw Error("Users not found");
-    }
     const allUserDtos = allUsers.map((user) => getUserResponseDto(user));
     log.info("all users: " + allUserDtos);
-    return res.status(200).json({ status: 200, data: allUserDtos });
+    return res.status(200).json({ status: 200, users: allUserDtos });
   } catch (error: any) {
-    return res.status(400).json({ status: 400, message: error.message });
+    log.error(error);
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
 export async function getUserByEmailController(
@@ -42,14 +46,20 @@ export async function getUserByEmailController(
 ) {
   try {
     const user = await findUserByEmail(req.params.email);
-    if (!user) {
-      return res.status(404).json({ status: 404, message: "User not found" });
+    if (user) {
+      const userResponseDto = getUserResponseDto(user);
+      log.info("userResponseDto: ", userResponseDto);
+      return res.status(200).json({ status: 200, user: userResponseDto });
     }
-    const userResponseDto = getUserResponseDto(user);
-    log.info("user: " + userResponseDto);
-    return res.status(200).json({ status: 200, user: userResponseDto });
   } catch (error: any) {
-    return res.status(500).json({ status: 500, message: error.message });
+    log.error(error);
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
 
@@ -61,15 +71,16 @@ export async function createUserController(
     const body = req.body;
     const user = await createUser(body);
     log.info(`user created successfully, user: ${user}`);
-    return (
-      res
-        // .send("user created successfully")
-        .status(201)
-        .json({ status: 201, user })
-    );
+    return res.status(201).json({ status: 201, user });
   } catch (error: any) {
     log.error(error);
-    return res.status(400).json({ status: 400, message: error.message });
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
 
@@ -83,17 +94,14 @@ export async function verifyUserController(
     await verifyUser(id, verificationCode);
     return res.status(200).send("user verified successfully");
   } catch (error: any) {
-    if (error.name === "ValidationError") {
-      // let errors={};
-      log.error(error);
-      const message = Object.values(error.errors).map(
-        (val: any) => val.message
-      );
-      return res.status(400).json({ status: 400, message: message });
-    }
-
     log.error(error);
-    return res.status(400).json({ status: 400, message: error.message });
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
 
@@ -106,7 +114,14 @@ export async function forgottenPasswordController(
     await forgottenPassword(email);
     return res.send("reset information sent successfully").status(200);
   } catch (error: any) {
-    return res.status(400).json({ status: 400, message: error.message });
+    log.error(error);
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
 
@@ -120,6 +135,13 @@ export async function resetPasswordController(
     await resetPassword(id, passwordResetCode, password);
     return res.send("your password has been reset successfully").status(200);
   } catch (error: any) {
-    return res.status(400).json({ status: 400, message: error.message });
+    log.error(error);
+    if (error instanceof InternalServerError) {
+      return res.status(500).json({ error: "Internal Server Error" });
+    } else if (error instanceof NotFoundError) {
+      return res.status(404).json({ error: error.message });
+    } else {
+      return res.status(400).json({ error: error.message });
+    }
   }
 }
